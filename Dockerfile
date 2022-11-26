@@ -1,96 +1,31 @@
-# syntax=docker/dockerfile:1.4
-# This needs to be bullseye-slim because the Ruby image is built on bullseye-slim
-ARG NODE_VERSION="16.17.1-bullseye-slim"
+FROM public.ecr.aws/lambda/ruby:2.7
 
-FROM ghcr.io/moritzheiber/ruby-jemalloc:3.0.4-slim as ruby
-FROM node:${NODE_VERSION} as build
+WORKDIR WORKDIR /var/task
 
-COPY --link --from=ruby /opt/ruby /opt/ruby
+RUN yum update -y
+RUN yum install -y amazon-linux-extras
+RUN amazon-linux-extras install postgresql13
+RUN yum install -y git postgresql-devel libidn-devel libicu-devel zlib-devel openssl-devel libyaml-devel ca-certificates shared-mime-info ruby-devel make gcc gcc-c++ which
 
-ENV DEBIAN_FRONTEND="noninteractive" \
-    PATH="${PATH}:/opt/ruby/bin"
+COPY Gemfile* ./
+RUN     bundle config set --local without 'development test' && \
+        bundle config set silence_root_warning true && \
+        bundle install -j"$(nproc)"
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -sL https://rpm.nodesource.com/setup_16.x | bash -
+RUN curl -sL https://dl.yarnpkg.com/rpm/yarn.repo | tee /etc/yum.repos.d/yarn.repo
+RUN yum install -y nodejs yarn
 
-WORKDIR /opt/mastodon
-COPY Gemfile* package.json yarn.lock /opt/mastodon/
-
-RUN apt update && \
-    apt-get install -y --no-install-recommends build-essential \
-        ca-certificates \
-        git \
-        libicu-dev \
-        libidn11-dev \
-        libpq-dev \
-        libjemalloc-dev \
-        zlib1g-dev \
-        libgdbm-dev \
-        libgmp-dev \
-        libssl-dev \
-        libyaml-0-2 \
-        ca-certificates \
-        libreadline8 \
-        python3 \
-        shared-mime-info && \
-    bundle config set --local deployment 'true' && \
-    bundle config set --local without 'development test' && \
-    bundle config set silence_root_warning true && \
-    bundle install -j"$(nproc)" && \
-    yarn install --pure-lockfile
-
-FROM node:${NODE_VERSION}
-
-ARG UID="991"
-ARG GID="991"
-
-COPY --link --from=ruby /opt/ruby /opt/ruby
-
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-ENV DEBIAN_FRONTEND="noninteractive" \
-    PATH="${PATH}:/opt/ruby/bin:/opt/mastodon/bin"
-
-RUN apt-get update && \
-    echo "Etc/UTC" > /etc/localtime && \
-    groupadd -g "${GID}" mastodon && \
-    useradd -u "$UID" -g "${GID}" -m -d /opt/mastodon mastodon && \
-    apt-get -y --no-install-recommends install whois \
-        wget \
-        procps \
-        libssl1.1 \
-        libpq5 \
-        imagemagick \
-        ffmpeg \
-        libjemalloc2 \
-        libicu67 \
-        libidn11 \
-        libyaml-0-2 \
-        file \
-        ca-certificates \
-        tzdata \
-        libreadline8 \
-        tini && \
-    ln -s /opt/mastodon /mastodon
-
-# Note: no, cleaning here since Debian does this automatically
-# See the file /etc/apt/apt.conf.d/docker-clean within the Docker image's filesystem
-
-COPY --chown=mastodon:mastodon . /opt/mastodon
-COPY --chown=mastodon:mastodon --from=build /opt/mastodon /opt/mastodon
+# TODO: multi-stage build to remove build bloat from image
 
 ENV RAILS_ENV="production" \
     NODE_ENV="production" \
     RAILS_SERVE_STATIC_FILES="true" \
     BIND="0.0.0.0"
 
-# Set the run user
-USER mastodon
-WORKDIR /opt/mastodon
+COPY . .
 
 # Precompile assets
-RUN OTP_SECRET=precompile_placeholder SECRET_KEY_BASE=precompile_placeholder rails assets:precompile && \
-    yarn cache clean
+RUN OTP_SECRET=precompile_placeholder SECRET_KEY_BASE=precompile_placeholder bundle exec rails assets:precompile
 
-# Set the work dir and the container entry point
-ENTRYPOINT ["/usr/bin/tini", "--"]
-EXPOSE 3000 4000
+#CMD ["app.handler"]
