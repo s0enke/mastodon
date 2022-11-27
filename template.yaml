@@ -32,6 +32,13 @@ Resources:
       AutoPublishAlias: live
       DeploymentPreference:
         Type: AllAtOnce
+      Environment:
+        Variables:
+          OTP_SECRET: 369bf1600ccc5fd056cd186950ab205877f0e61c2232f9d00a79e0322fd329710ceedd16990561b59e21a037b24814fdf454845fd614f599a24fecb60a19b281
+          SECRET_KEY_BASE: fe1a1aa1e4194ce86663b07ed532dba699c1b4036d5d84879b78b71e6a117ba5a39de7177a8bf507c384921d88d624ec2238203c358efb8a6611462323bc8208
+          DB_HOST: db
+          DB_NAME: mastodon
+          REDIS_HOST: redis
       Events:
         HttpApiProxy:
           Type: HttpApi
@@ -39,7 +46,7 @@ Resources:
             ApiId: !Ref RailsHttpApi
       MemorySize: 1792
       PackageType: Image
-      Timeout: 30
+      Timeout: 300
 
   RailsHttpApi:
     Type: AWS::Serverless::HttpApi

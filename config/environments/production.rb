@@ -1,4 +1,8 @@
 Rails.application.configure do
+
+  config.hosts = [
+    "127.0.0.1",
+  ]
   # Settings specified here will take precedence over those in config/application.rb.
 
   # Code is not reloaded between requests.
@@ -44,7 +48,12 @@ Rails.application.configure do
   # Allow to specify public IP of reverse proxy if it's needed
   config.action_dispatch.trusted_proxies = ENV['TRUSTED_PROXY_IP'].split(/(?:\s*,\s*|\s+)/).map { |item| IPAddr.new(item) } if ENV['TRUSTED_PROXY_IP'].present?
 
-  config.force_ssl = true
+  config.public_file_server.headers = {
+    'Cache-Control' => "public, max-age=#{30.days.seconds.to_i}",
+    'X-Lamby-Base64' => '1'
+  }
+
+  config.force_ssl = false
   config.ssl_options = {
     redirect: {
       exclude: -> request { request.path.start_with?('/health') || request.headers["Host"].end_with?('.onion') || request.headers["Host"].end_with?('.i2p') }
